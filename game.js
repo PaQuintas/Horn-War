@@ -251,7 +251,8 @@ function applyRoomGameState(snapshot) {
       cannonAwarded: Boolean(player.cannonAwarded),
       cannonAvailable: Boolean(player.cannonAvailable),
       cannonProgress: player.cannonProgress ?? [],
-      cannonSequence: player.cannonSequence ?? []
+      cannonSequence: player.cannonSequence ?? [],
+      cannonUsedSequences: player.cannonUsedSequences ?? []
     })),
     available: new Set(snapshot.available),
     cpuTimer: null,
@@ -434,10 +435,20 @@ function takeRandomAvailable() {
 
 function prepareTurn(player) {
   state.activePlayer = player;
-  state.phase = "choose-number";
   state.choiceNumber = null;
   state.choiceSource = null;
   state.randomRevealed = false;
+
+  const currentPlayer = getPlayer(player);
+  const sequence = currentPlayer && findConsecutiveSet(currentPlayer);
+  if (sequence) {
+    currentPlayer.cannonAvailable = true;
+    currentPlayer.cannonSequence = sequence;
+    currentPlayer.cannonProgress = [];
+    state.phase = "choose-cannon-target";
+    return;
+  }
+  state.phase = "choose-number";
 
   if (state.offered !== null) {
     state.choiceNumber = state.offered;
@@ -482,7 +493,8 @@ function newGame(mode, levelIndex, difficulty = elements.difficulty.value, onlin
       cannonAwarded: false,
       cannonAvailable: false,
       cannonProgress: [],
-      cannonSequence: []
+      cannonSequence: [],
+      cannonUsedSequences: []
     }))
     : (isMultiplayer ? seatIds.slice(0, 3) : ["human", "cpu"]).map((id, index) => ({
       id,
@@ -493,7 +505,8 @@ function newGame(mode, levelIndex, difficulty = elements.difficulty.value, onlin
       cannonAwarded: false,
       cannonAvailable: false,
       cannonProgress: [],
-      cannonSequence: []
+      cannonSequence: [],
+      cannonUsedSequences: []
     }));
   state = {
     mode,
@@ -555,11 +568,12 @@ function isOrdered(tower) {
 }
 
 function findConsecutiveSet(player) {
-  const progress = new Set(player.cannonProgress);
+  const usedSequences = new Set(player.cannonUsedSequences ?? []);
   for (let index = 0; index <= player.tower.length - 4; index += 1) {
     const sequence = player.tower.slice(index, index + 4);
-    if (!sequence.every(number => progress.has(number))) continue;
-    if (sequence.every((number, offset) => number === sequence[0] - offset)) return sequence;
+    if (!sequence.every((number, offset) => number === sequence[0] - offset)) continue;
+    const sequenceKey = sequence.join("-");
+    if (!usedSequences.has(sequenceKey)) return sequence;
   }
   return null;
 }
@@ -937,6 +951,8 @@ function fireCannon(targetPlayerId, index, actorId = localPlayerId) {
   state.available.add(replacedNumber);
   attacker.cannonAvailable = false;
   attacker.cannonProgress = [];
+  attacker.cannonUsedSequences ??= [];
+  attacker.cannonUsedSequences.push(attacker.cannonSequence.join("-"));
   attacker.cannonSequence = [];
   state.phase = "cannon-firing";
   state.lastCannonShot = {
@@ -1159,14 +1175,11 @@ function finishMove(player, index) {
     return;
   }
 
-  if (!currentPlayer.cannonAvailable && !currentPlayer.cannonProgress.includes(placedNumber)) {
-    currentPlayer.cannonProgress.push(placedNumber);
-    const sequence = findConsecutiveSet(currentPlayer);
-    if (sequence) {
-      currentPlayer.cannonAvailable = true;
-      currentPlayer.cannonSequence = sequence;
-      currentPlayer.cannonProgress = [];
-    }
+  const sequence = findConsecutiveSet(currentPlayer);
+  if (sequence) {
+    currentPlayer.cannonAvailable = true;
+    currentPlayer.cannonSequence = sequence;
+    currentPlayer.cannonProgress = [];
   }
   if (currentPlayer.cannonAvailable) {
     state.activePlayer = player;
