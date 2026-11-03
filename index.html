@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#34251d">
+    <title>Horn War</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="game.js" defer></script>
+  </head>
+  <body>
+    <main class="game-shell">
+      <header class="masthead">
+        <p class="eyebrow">Desafío de ingenio</p>
+        <h1>Horn War</h1>
+        <p class="intro">Ordena los números de tu torre antes que tu rival.</p>
+      </header>
+
+      <section id="main-menu" class="menu-screen" aria-labelledby="menu-title">
+        <p class="eyebrow">Bienvenido a Horn War</p>
+        <h2 id="menu-title">¿Qué deseas hacer?</h2>
+        <button id="open-play" class="menu-button menu-button-primary" type="button">Jugar</button>
+        <button id="open-instructions" class="menu-button" type="button">Instrucciones</button>
+      </section>
+
+      <section id="mode-menu" class="menu-screen" aria-labelledby="mode-title" hidden>
+        <p class="eyebrow">Elige a tu rival</p>
+        <h2 id="mode-title">Jugar</h2>
+        <button id="play-bot" class="menu-button menu-button-primary" type="button">Contra bot</button>
+        <button id="play-humans" class="menu-button" type="button">Multijugador online</button>
+        <button class="text-button menu-back" data-screen="main-menu" type="button">Volver</button>
+      </section>
+
+      <section id="bot-setup" class="menu-screen bot-setup" aria-labelledby="bot-setup-title" hidden>
+        <p class="eyebrow">Prepara la partida</p>
+        <h2 id="bot-setup-title">Contra CPU</h2>
+        <p class="menu-note campaign-description">Supera los siete niveles consecutivos. Si pierdes, la campaña vuelve a empezar desde el principio.</p>
+        <label for="campaign-player-name">Tu nombre</label>
+        <input id="campaign-player-name" class="setup-input" type="text" maxlength="16" value="Jugador 1" autocomplete="given-name">
+        <label for="cpu-difficulty">Dificultad</label>
+        <select id="cpu-difficulty">
+          <option value="medium">Medio</option>
+          <option value="hard">Difícil</option>
+        </select>
+        <label class="setup-checkbox" for="blind-bot-towers">
+          <input id="blind-bot-towers" type="checkbox">
+          <span>Ocultar la torre de la CPU tras el primer intercambio</span>
+        </label>
+        <button id="start-bot-game" class="menu-button menu-button-primary" type="button">Empezar</button>
+        <button class="text-button menu-back" data-screen="mode-menu" type="button">Volver</button>
+      </section>
+
+      <section id="online-menu" class="menu-screen bot-setup" aria-labelledby="online-menu-title" hidden>
+        <p class="eyebrow">Partida online</p>
+        <h2 id="online-menu-title">Campo de batalla</h2>
+        <label for="online-player-name">Tu nombre</label>
+        <input id="online-player-name" class="setup-input" type="text" maxlength="16" value="Jugador 1" autocomplete="given-name">
+        <button id="create-room" class="menu-button menu-button-primary" type="button">Crear campo de batalla</button>
+        <label for="room-code-input">Código de sala de 4 cifras</label>
+        <input id="room-code-input" class="setup-input room-code-input" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="0000" autocomplete="one-time-code">
+        <button id="join-room" class="menu-button" type="button">Unirte al campo de batalla</button>
+        <p id="online-error" class="menu-error" role="alert" hidden></p>
+        <button class="text-button menu-back" data-screen="mode-menu" type="button">Volver</button>
+      </section>
+
+      <section id="room-lobby" class="menu-screen bot-setup room-lobby" aria-labelledby="room-lobby-title" hidden>
+        <p class="eyebrow">Sala abierta · hasta 4 jugadores</p>
+        <h2 id="room-lobby-title">Campo de batalla</h2>
+        <p class="menu-note">Comparte este código para que se unan tus rivales.</p>
+        <strong id="room-code-display" class="room-code-display" aria-label="Código de sala"></strong>
+        <ol id="room-player-list" class="room-player-list"></ol>
+        <p id="room-player-count" class="menu-note" aria-live="polite"></p>
+        <label for="room-level-select">Nivel inicial</label>
+        <select id="room-level-select"></select>
+        <p id="room-level-range" class="menu-note"></p>
+        <label class="setup-checkbox" for="room-blind-towers">
+          <input id="room-blind-towers" type="checkbox">
+          <span>Ocultar las torres rivales tras el primer intercambio</span>
+        </label>
+        <p class="menu-note">Sin cortina: se muestra una torre de referencia sin números.</p>
+        <p id="room-lobby-status" class="menu-note" aria-live="polite">Esperando jugadores…</p>
+        <button id="start-room" class="menu-button menu-button-primary" type="button" disabled>Empezar partida</button>
+        <button id="leave-room" class="text-button menu-back" type="button">Salir de la sala</button>
+      </section>
+
+      <section id="instructions-screen" class="menu-screen instructions-screen" aria-labelledby="instructions-title" hidden>
+        <p class="eyebrow">Reglas del desafío</p>
+        <h2 id="instructions-title">Instrucciones</h2>
+        <ol>
+          <li>Ordena tus 10 bloques de mayor a menor desde la base hasta la cima: el número mayor queda abajo y el menor junto al cazador. No hace falta que sean consecutivos.</li>
+          <li>Al colocar cuatro números consecutivos en cuatro bloques seguidos de tu torre, de arriba abajo y de menor a mayor —por ejemplo, 23-24-25-26— obtienes un cañonazo. Deben ser números nuevos desde tu último cañonazo y permanecer juntos en la torre. Elige un rival y un bloque suyo para sustituirlo por un número aleatorio del saco; el bloque impactado vuelve al saco. Tras gastar la carga, puedes conseguir otra con cuatro números consecutivos nuevos.</li>
+          <li>En la campaña contra la CPU, completa los siete niveles seguidos para ganar. Si pierdes, la campaña vuelve a empezar.</li>
+          <li>En cada turno puedes tomar el número que aparece o revelar uno aleatorio con la interrogación. Al revelar otro, el número anterior se descarta.</li>
+          <li>Después de revelar, puedes intercambiar ese número por un bloque de tu torre o pasar turno; si pasas, el número vuelve al saco.</li>
+          <li>El número que descartes al intercambiar pasa al siguiente rival. En las salas online, de 2 a 4 jugadores se turnan en círculo.</li>
+          <li>En multijugador, el rango crece con los participantes: el nivel 1 usa números del 1 al 50 para 2 jugadores, 1 al 75 para 3 y 1 al 100 para 4.</li>
+          <li>Los números no se repiten en una misma partida. Gana quien ordene su torre de mayor a menor primero.</li>
+        </ol>
+        <p class="instructions-extra">Si activas ocultar las torres rivales, después del primer intercambio solo verás una torre de referencia sin números; la flecha roja señala el bloque que cambió. No hay cortinas.</p>
+        <button class="text-button menu-back" data-screen="main-menu" type="button">Volver al menú</button>
+      </section>
+
+      <section id="campaign-level-screen" class="menu-screen campaign-level-screen" aria-labelledby="campaign-level-title" hidden>
+        <p class="eyebrow">Campaña contra CPU</p>
+        <h2 id="campaign-level-title">Nivel 1</h2>
+        <p id="campaign-level-description" class="menu-note">Prepárate para el desafío.</p>
+        <button id="campaign-level-continue" class="menu-button menu-button-primary" type="button">Continuar</button>
+      </section>
+
+      <section id="game-screen" hidden>
+        <nav class="game-nav" aria-label="Navegación de partida">
+          <p id="online-game-status" class="online-game-status" aria-live="polite" hidden></p>
+          <button id="abandon-game" class="button button-muted" type="button">Abandonar</button>
+        </nav>
+        <p id="campaign-progress" class="campaign-progress" hidden></p>
+
+        <section class="battlefield" aria-label="Tablero">
+          <div id="round-start" class="round-start-overlay">
+            <p id="round-start-label" class="eyebrow">Nivel 1</p>
+            <h2 id="round-range">Números del 1 al 50</h2>
+            <div class="roulette-wheel" aria-hidden="true"><span id="roulette-wheel-symbol">?</span></div>
+            <p id="roulette-result" class="roulette-result" aria-live="polite">Pulsa comenzar para sortear quién empieza.</p>
+            <button id="begin-round" class="menu-button menu-button-primary" type="button">Comenzar</button>
+          </div>
+          <div class="cloud-layer" aria-hidden="true">
+            <span class="cloud cloud-one"></span>
+            <span class="cloud cloud-two"></span>
+            <span class="cloud cloud-three"></span>
+          </div>
+
+          <article class="player-panel human-panel" data-player="human">
+            <div class="player-heading"><h2 id="human-label">Tú</h2></div>
+            <div id="human-tower" class="tower" aria-label="Tu torre, de la base a la cima"></div>
+          </article>
+
+          <section class="center-stage" aria-label="Números y cazadores">
+            <section class="turn-panel" aria-label="Elige un número">
+              <h2 id="turn-title" class="visually-hidden">Tu turno</h2>
+              <p id="status-message" class="visually-hidden" aria-live="polite"></p>
+              <p id="cannon-status" class="cannon-status" aria-live="polite" hidden></p>
+              <div id="number-actions" class="number-actions">
+                <div id="opening-choices" class="choice-cards">
+                  <button id="opening-visible" class="choice-card" type="button" aria-label="Escoger número visible">
+                    <strong id="opening-visible-number"></strong>
+                  </button>
+                  <button id="opening-hidden" class="choice-card choice-card-hidden" type="button" aria-label="Revelar un número aleatorio">
+                    <strong id="opening-hidden-symbol" aria-hidden="true">?</strong>
+                    <span id="pass-label" class="choice-card-caption" hidden>Pasar turno</span>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <div class="rock-scene" aria-label="Dos cazadores con trompas naturales sobre una roca">
+              <svg class="hunter hunter-left" data-hunter="human" viewBox="0 0 90 112" role="img" aria-label="Cazador con trompa natural">
+                <circle class="hunter-face" cx="43" cy="31" r="13"/>
+                <path class="hunter-hat hunter-hat-rust" d="M27 27 Q43 7 59 27 L57 31 L29 31 Z M34 20 L50 20 L43 12 Z"/>
+                <path class="hunter-coat" d="M34 43 L52 43 L65 89 L22 89 Z"/>
+                <path class="hunter-belt hunter-belt-rust" d="M27 68 L59 68 L61 75 L25 75 Z"/>
+                <path class="hunter-leg" d="M29 87 L43 87 L38 107 L27 107 Z M46 87 L59 87 L64 107 L52 107 Z"/>
+                <path class="hunter-boot hunter-boot-rust" d="M26 103 L39 103 L39 109 L21 109 Z M52 103 L65 103 L70 109 L53 109 Z"/>
+                <path class="hunter-arm" d="M34 47 L24 55 L28 70 L35 67 L32 57 L40 53 Z M51 47 L61 51 L63 61 L56 63 L54 56 L48 54 Z"/>
+                <path class="hunter-horn" d="M14 48 C27 45 37 47 41 54 C34 62 31 71 35 79 C41 91 58 93 69 83 C80 73 76 58 66 55 C57 52 50 59 51 68"/>
+                <path class="hunter-horn-bell" d="M7 41 Q14 36 23 41 L31 50 Q21 54 10 53 Z"/>
+                <path class="hunter-horn-rim" d="M7 41 Q14 36 23 41"/>
+                <path class="hunter-horn-tip" d="M48 66 L55 62 L59 68 L52 73 Z"/>
+                <path class="hunter-hand" d="M37 53 Q42 49 46 54 L48 60 L43 64 L38 60 Z M54 70 Q58 66 63 69 L66 74 L61 78 L56 76 Z"/>
+                <path class="hunter-bow" d="M70 42 Q85 57 70 72"/>
+                <path class="hunter-bowstring" d="M70 42 L73 57 L70 72"/>
+              </svg>
+              <svg class="hunter hunter-right" data-hunter="cpu" viewBox="0 0 90 112" role="img" aria-label="Cazador con trompa natural">
+                <circle class="hunter-face" cx="46" cy="31" r="13"/>
+                <path class="hunter-hat hunter-hat-sage" d="M30 27 Q46 7 62 27 L60 31 L32 31 Z M37 20 L53 20 L46 12 Z"/>
+                <path class="hunter-coat hunter-coat-gold" d="M37 43 L55 43 L68 89 L25 89 Z"/>
+                <path class="hunter-belt hunter-belt-sage" d="M30 68 L62 68 L64 75 L28 75 Z"/>
+                <path class="hunter-leg" d="M32 87 L46 87 L41 107 L30 107 Z M49 87 L62 87 L67 107 L55 107 Z"/>
+                <path class="hunter-boot hunter-boot-sage" d="M29 103 L42 103 L42 109 L24 109 Z M55 103 L68 103 L73 109 L56 109 Z"/>
+                <path class="hunter-arm" d="M37 47 L27 55 L31 70 L38 67 L35 57 L43 53 Z M54 47 L64 51 L66 61 L59 63 L57 56 L51 54 Z"/>
+                <path class="hunter-horn" d="M14 48 C27 45 37 47 41 54 C34 62 31 71 35 79 C41 91 58 93 69 83 C80 73 76 58 66 55 C57 52 50 59 51 68"/>
+                <path class="hunter-horn-bell" d="M7 41 Q14 36 23 41 L31 50 Q21 54 10 53 Z"/>
+                <path class="hunter-horn-rim" d="M7 41 Q14 36 23 41"/>
+                <path class="hunter-horn-tip" d="M48 66 L55 62 L59 68 L52 73 Z"/>
+                <path class="hunter-hand" d="M37 53 Q42 49 46 54 L48 60 L43 64 L38 60 Z M54 70 Q58 66 63 69 L66 74 L61 78 L56 76 Z"/>
+                <path class="hunter-bow" d="M70 42 Q85 57 70 72"/>
+                <path class="hunter-bowstring" d="M70 42 L73 57 L70 72"/>
+              </svg>
+              <svg class="hunter hunter-third" data-hunter="player3" viewBox="0 0 90 112" role="img" aria-label="Tercer cazador con trompa natural">
+                <circle class="hunter-face" cx="45" cy="31" r="13"/>
+                <path class="hunter-hat hunter-hat-rust" d="M29 27 Q45 7 61 27 L59 31 L31 31 Z M36 20 L52 20 L45 12 Z"/>
+                <path class="hunter-coat hunter-coat-gold" d="M36 43 L54 43 L67 89 L24 89 Z"/>
+                <path class="hunter-belt hunter-belt-sage" d="M29 68 L61 68 L63 75 L27 75 Z"/>
+                <path class="hunter-leg" d="M31 87 L45 87 L40 107 L29 107 Z M48 87 L61 87 L66 107 L54 107 Z"/>
+                <path class="hunter-boot hunter-boot-rust" d="M28 103 L41 103 L41 109 L23 109 Z M54 103 L67 103 L72 109 L55 109 Z"/>
+                <path class="hunter-arm" d="M36 47 L26 55 L30 70 L37 67 L34 57 L42 53 Z M53 47 L63 51 L65 61 L58 63 L56 56 L50 54 Z"/>
+                <path class="hunter-horn" d="M14 48 C27 45 37 47 41 54 C34 62 31 71 35 79 C41 91 58 93 69 83 C80 73 76 58 66 55 C57 52 50 59 51 68"/>
+                <path class="hunter-horn-bell" d="M7 41 Q14 36 23 41 L31 50 Q21 54 10 53 Z"/>
+                <path class="hunter-horn-rim" d="M7 41 Q14 36 23 41"/>
+                <path class="hunter-horn-tip" d="M48 66 L55 62 L59 68 L52 73 Z"/>
+                <path class="hunter-hand" d="M37 53 Q42 49 46 54 L48 60 L43 64 L38 60 Z M54 70 Q58 66 63 69 L66 74 L61 78 L56 76 Z"/>
+                <path class="hunter-bow" d="M70 42 Q85 57 70 72"/>
+                <path class="hunter-bowstring" d="M70 42 L73 57 L70 72"/>
+              </svg>
+              <svg class="hunter hunter-fourth" data-hunter="player4" viewBox="0 0 90 112" role="img" aria-label="Cuarto cazador con trompa natural">
+                <circle class="hunter-face" cx="45" cy="31" r="13"/>
+                <path class="hunter-hat hunter-hat-sage" d="M29 27 Q45 7 61 27 L59 31 L31 31 Z M36 20 L52 20 L45 12 Z"/>
+                <path class="hunter-coat hunter-coat-gold" d="M36 43 L54 43 L67 89 L24 89 Z"/>
+                <path class="hunter-belt hunter-belt-rust" d="M29 68 L61 68 L63 75 L27 75 Z"/>
+                <path class="hunter-leg" d="M31 87 L45 87 L40 107 L29 107 Z M48 87 L61 87 L66 107 L54 107 Z"/>
+                <path class="hunter-boot hunter-boot-sage" d="M28 103 L41 103 L41 109 L23 109 Z M54 103 L67 103 L72 109 L55 109 Z"/>
+                <path class="hunter-arm" d="M36 47 L26 55 L30 70 L37 67 L34 57 L42 53 Z M53 47 L63 51 L65 61 L58 63 L56 56 L50 54 Z"/>
+                <path class="hunter-horn" d="M14 48 C27 45 37 47 41 54 C34 62 31 71 35 79 C41 91 58 93 69 83 C80 73 76 58 66 55 C57 52 50 59 51 68"/>
+                <path class="hunter-horn-bell" d="M7 41 Q14 36 23 41 L31 50 Q21 54 10 53 Z"/>
+                <path class="hunter-horn-rim" d="M7 41 Q14 36 23 41"/>
+                <path class="hunter-horn-tip" d="M48 66 L55 62 L59 68 L52 73 Z"/>
+                <path class="hunter-hand" d="M37 53 Q42 49 46 54 L48 60 L43 64 L38 60 Z M54 70 Q58 66 63 69 L66 74 L61 78 L56 76 Z"/>
+                <path class="hunter-bow" d="M70 42 Q85 57 70 72"/>
+                <path class="hunter-bowstring" d="M70 42 L73 57 L70 72"/>
+              </svg>
+              <div class="rock rock-back"></div>
+              <div class="rock rock-front"></div>
+            </div>
+          </section>
+
+          <article class="player-panel cpu-panel" data-player="cpu">
+            <div class="player-heading"><h2 id="cpu-label">CPU</h2></div>
+            <div id="cpu-tower" class="tower" aria-label="Torre de la CPU, de la base a la cima"></div>
+          </article>
+
+          <article class="player-panel third-panel" data-player="player3">
+            <div class="player-heading"><h2>Jugador 3</h2></div>
+            <div id="third-tower" class="tower" aria-label="Torre del jugador 3, de la base a la cima"></div>
+          </article>
+
+          <article class="player-panel fourth-panel" data-player="player4" hidden>
+            <div class="player-heading"><h2>Jugador 4</h2></div>
+            <div id="fourth-tower" class="tower" aria-label="Torre del jugador 4, de la base a la cima"></div>
+          </article>
+
+          <section id="victory-overlay" class="victory-overlay" aria-live="polite" hidden>
+            <p id="round-result" class="round-result" role="status"></p>
+            <button id="result-action" class="button menu-button-primary result-action" type="button" hidden></button>
+            <button id="result-exit" class="button button-muted result-exit" type="button" hidden>Salir</button>
+          </section>
+        </section>
+
+      </section>
+    </main>
+  </body>
+</html>
