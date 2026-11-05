@@ -7,7 +7,7 @@ const { WebSocketServer, WebSocket } = require("ws");
 
 const PORT = Number(process.env.PORT) || 3000;
 const ROOT = __dirname;
-const LEVEL_COUNT = 7;
+const LEVEL_COUNT = 10;
 const rooms = new Map();
 const roomSockets = new Map();
 

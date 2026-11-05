@@ -1,5 +1,6 @@
 const LEVELS = [50, 45, 42, 38, 35, 32, 30];
 const BLOCKS_PER_TOWER = 10;
+const CANNON_SEQUENCE_LENGTH = 3;
 const ROOM_SESSION_KEY = "horn-war-room-session";
 
 const elements = {
@@ -28,6 +29,11 @@ const elements = {
   startRoom: document.querySelector("#start-room"),
   onlineGameStatus: document.querySelector("#online-game-status"),
   abandon: document.querySelector("#abandon-game"),
+  multiplayerScoreboard: document.querySelector("#multiplayer-scoreboard"),
+  multiplayerScoringRule: document.querySelector("#multiplayer-scoring-rule"),
+  roundStandings: document.querySelector("#round-standings"),
+  roundStandingsTitle: document.querySelector("#round-standings-title"),
+  roundStandingsList: document.querySelector("#round-standings-list"),
   towers: {
     human: document.querySelector("#human-tower"),
     cpu: document.querySelector("#cpu-tower"),
@@ -50,6 +56,7 @@ const elements = {
   beginRound: document.querySelector("#begin-round"),
   rouletteWheel: document.querySelector(".roulette-wheel"),
   rouletteSymbol: document.querySelector("#roulette-wheel-symbol"),
+  rouletteLegend: document.querySelector("#roulette-legend"),
   rouletteResult: document.querySelector("#roulette-result"),
   title: document.querySelector("#turn-title"),
   status: document.querySelector("#status-message"),
@@ -92,6 +99,17 @@ function levelMaximum(levelIndex, playerCount = 2) {
   return Math.round(LEVELS[levelIndex] * playerCount / 2);
 }
 
+function multiplayerLevelCount(playerCount) {
+  const minimum = BLOCKS_PER_TOWER * playerCount + 5;
+  const lastExistingMaximum = levelMaximum(LEVELS.length - 1, playerCount);
+  return LEVELS.length + Math.max(0, Math.round((lastExistingMaximum - minimum) / 5));
+}
+
+function multiplayerLevelMaximum(levelIndex, playerCount) {
+  if (levelIndex < LEVELS.length) return levelMaximum(levelIndex, playerCount);
+  return levelMaximum(LEVELS.length - 1, playerCount) - 5 * (levelIndex - LEVELS.length + 1);
+}
+
 async function roomRequest(path, options = {}) {
   const headers = { "Content-Type": "application/json" };
   const body = { ...options.body };
@@ -130,19 +148,22 @@ function renderRoomLobby() {
   }
   const count = currentRoom.players.length;
   elements.roomPlayerCount.textContent = `${count} de 4 jugadores unidos`;
-  elements.roomLevel.replaceChildren(...LEVELS.map((_, levelIndex) => {
+  const playersForRange = Math.max(count, 2);
+  const availableLevels = multiplayerLevelCount(playersForRange);
+  const selectedLevelIndex = Math.min(currentRoom.level_index, availableLevels - 1);
+  elements.roomLevel.replaceChildren(...Array.from({ length: availableLevels }, (_, levelIndex) => {
     const option = document.createElement("option");
-    const maximum = levelMaximum(levelIndex, Math.max(count, 2));
+    const maximum = multiplayerLevelMaximum(levelIndex, playersForRange);
     option.value = String(levelIndex);
     option.textContent = `Nivel ${levelIndex + 1} · 1–${maximum}`;
     return option;
   }));
-  elements.roomLevel.value = String(currentRoom.level_index);
+  elements.roomLevel.value = String(selectedLevelIndex);
   elements.roomLevel.disabled = !currentRoom.isHost || currentRoom.status !== "waiting";
   elements.roomBlindTowers.checked = Boolean(currentRoom.blind_mode);
   elements.roomBlindTowers.disabled = !currentRoom.isHost || currentRoom.status !== "waiting";
   elements.roomLevelRange.textContent =
-    `Rango para ${Math.max(count, 2)} jugadores: del 1 al ${levelMaximum(currentRoom.level_index, Math.max(count, 2))}. Se recalculará si cambia el número de participantes.`;
+    `Rango para ${playersForRange} jugadores: del 1 al ${multiplayerLevelMaximum(selectedLevelIndex, playersForRange)}. El último nivel deja 5 números en el saco.`;
   elements.roomLobbyStatus.textContent = currentRoom.status === "in_progress"
     ? "La partida ya ha comenzado."
     : `${count} de 4 jugadores · ${count < 2 ? "esperando al menos a otro jugador…" : "pueden unirse más jugadores antes de empezar."}`;
@@ -237,9 +258,24 @@ function setOnlineGameStatus(message) {
   elements.onlineGameStatus.hidden = !message;
 }
 
+function updateTurnIndicator() {
+  if (!currentRoom || state?.mode !== "multiplayer") return;
+  const activePlayer = getPlayer(state.activePlayer);
+  const message = state.gameOver
+    ? `Sala ${currentRoom.code} · Ronda terminada`
+    : state.phase === "ready"
+      ? `Sala ${currentRoom.code} · Preparando ronda`
+      : `Sala ${currentRoom.code} · Turno de ${activePlayer?.name ?? "…"}`;
+  setOnlineGameStatus(message);
+}
+
 function applyRoomGameState(snapshot) {
   if (state?.roomId === currentRoom.id && snapshot.revision <= state.revision) return;
   const previousGameOver = state?.gameOver ?? false;
+  const startsNextRound = state?.roomId === currentRoom.id
+    && !snapshot.gameOver
+    && (previousGameOver || snapshot.levelIndex !== state.levelIndex);
+  if (startsNextRound) clearRoundAnimations();
   const previousCannonShotId = state?.lastCannonShot?.id;
   const shouldAnimateCannon = snapshot.phase === "cannon-firing"
     && snapshot.lastCannonShot?.id
@@ -248,11 +284,14 @@ function applyRoomGameState(snapshot) {
     ...snapshot,
     players: snapshot.players.map(player => ({
       ...player,
+      score: Number.isFinite(player.score) ? player.score : 0,
+      roundsWon: Number.isFinite(player.roundsWon) ? player.roundsWon : 0,
+      roundPoints: Number.isFinite(player.roundPoints) ? player.roundPoints : 0,
       cannonAwarded: Boolean(player.cannonAwarded),
       cannonAvailable: Boolean(player.cannonAvailable),
       cannonProgress: player.cannonProgress ?? [],
       cannonSequence: player.cannonSequence ?? [],
-      cannonUsedSequences: player.cannonUsedSequences ?? []
+      cannonEligibleNumbers: player.cannonEligibleNumbers ?? player.tower
     })),
     available: new Set(snapshot.available),
     cpuTimer: null,
@@ -273,7 +312,7 @@ function applyRoomGameState(snapshot) {
   elements.resultOverlay.hidden = true;
   showScreen("game-screen");
   render();
-  setOnlineGameStatus(`Sala ${currentRoom.code} · ${currentRoom.players.length} jugadores`);
+  updateTurnIndicator();
   if (shouldAnimateCannon) animateCannonShot(state.lastCannonShot);
   if (!previousGameOver && state.gameOver) {
     state.animationTimers.push(window.setTimeout(() => animateVictory(state.activePlayer), 150));
@@ -383,11 +422,19 @@ async function joinOnlineRoom() {
 async function startOnlineRoom() {
   if (!currentRoom?.isHost || currentRoom.players.length < 2 || currentRoom.players.length > 4) return;
   try {
+    const maximumLevel = multiplayerLevelCount(currentRoom.players.length) - 1;
+    if (currentRoom.level_index > maximumLevel) {
+      currentRoom.level_index = maximumLevel;
+      await roomRequest(`/rooms/${encodeURIComponent(currentRoom.id)}/level`, {
+        method: "PATCH",
+        body: { levelIndex: maximumLevel }
+      });
+    }
     await roomRequest(`/rooms/${encodeURIComponent(currentRoom.id)}/start`, { method: "POST" });
     currentRoom.status = "in_progress";
     newGame("multiplayer", currentRoom.level_index, "medium", currentRoom.players);
     showScreen("game-screen");
-    setOnlineGameStatus(`Sala ${currentRoom.code} · ${currentRoom.players.length} jugadores`);
+    updateTurnIndicator();
     await persistOnlineGameState();
   } catch (error) {
     elements.roomLobbyStatus.textContent = `No se pudo iniciar: ${error.message}`;
@@ -425,6 +472,19 @@ function shuffled(values) {
   return result;
 }
 
+function clearRoundAnimations() {
+  if (state?.cpuTimer !== null && state?.cpuTimer !== undefined) clearTimeout(state.cpuTimer);
+  state?.animationTimers?.forEach(timer => clearTimeout(timer));
+  elements.panels.forEach(panel => {
+    panel.classList.remove("tower-under-attack");
+    panel.querySelector(".tower")?.classList.remove("tower-collapsing");
+    panel.querySelector(".summit-hunter")?.classList.remove("summit-archer-drawing", "hunter-suspended", "hunter-falling");
+  });
+  elements.hunters.forEach(hunter => hunter.classList.remove("hunter-archer", "hunter-falling", "hunter-suspended"));
+  elements.battlefield.querySelectorAll(".fire-arrow-generated, .victory-smoke-generated, .cannon-effect").forEach(effect => effect.remove());
+  elements.battlefield.classList.remove("battlefield-victory");
+}
+
 function takeRandomAvailable() {
   const numbers = [...state.available];
   if (numbers.length === 0) return null;
@@ -460,28 +520,31 @@ function prepareTurn(player) {
 }
 
 function newGame(mode, levelIndex, difficulty = elements.difficulty.value, onlinePlayers = null) {
+  const canCarryScores = mode === "multiplayer"
+    && state?.mode === "multiplayer"
+    && (!onlinePlayers || state.roomId === currentRoom?.id);
+  const previousPlayers = canCarryScores ? state.players : [];
   const previousRoomRevision = onlinePlayers && state?.roomId === currentRoom?.id
     ? state.revision
     : -1;
-  if (state?.cpuTimer !== null && state?.cpuTimer !== undefined) clearTimeout(state.cpuTimer);
-  state?.animationTimers?.forEach(timer => clearTimeout(timer));
-  elements.panels.forEach(panel => {
-    panel.classList.remove("tower-under-attack");
-    panel.querySelector(".tower")?.classList.remove("tower-collapsing");
-    panel.querySelector(".summit-hunter")?.classList.remove("summit-archer-drawing", "hunter-suspended", "hunter-falling");
-  });
-  elements.hunters.forEach(hunter => hunter.classList.remove("hunter-archer", "hunter-falling", "hunter-suspended"));
-  elements.battlefield.querySelectorAll(".fire-arrow-generated, .victory-smoke-generated, .cannon-effect").forEach(effect => effect.remove());
+  clearRoundAnimations();
   elements.roundStart.classList.remove("roulette-running");
   elements.rouletteWheel.classList.remove("roulette-spinning");
+  elements.rouletteWheel.style.removeProperty("transform");
   elements.rouletteSymbol.textContent = "?";
+  elements.rouletteSymbol.style.background = "#463321";
+  elements.rouletteSymbol.style.fontSize = ".72rem";
   elements.rouletteResult.textContent = "Pulsa comenzar para sortear quién empieza.";
   elements.roundStart.hidden = false;
   elements.beginRound.disabled = false;
   elements.beginRound.textContent = "Comenzar";
   const isMultiplayer = mode === "multiplayer";
   const playerCount = onlinePlayers?.length ?? (isMultiplayer ? 3 : 2);
-  const maximum = levelMaximum(levelIndex, isMultiplayer ? playerCount : 2);
+  const totalLevels = isMultiplayer ? multiplayerLevelCount(playerCount) : LEVELS.length;
+  const currentLevelIndex = isMultiplayer ? Math.min(levelIndex, totalLevels - 1) : levelIndex;
+  const maximum = isMultiplayer
+    ? multiplayerLevelMaximum(currentLevelIndex, playerCount)
+    : levelMaximum(currentLevelIndex, 2);
   const dealtNumbers = shuffled(Array.from({ length: maximum }, (_, index) => index + 1));
   const seatIds = ["human", "player2", "player3", "player4"];
   const players = onlinePlayers
@@ -489,28 +552,37 @@ function newGame(mode, levelIndex, difficulty = elements.difficulty.value, onlin
       id: seatIds[index],
       userId: roomPlayer.user_id,
       name: roomPlayer.player_name,
+      score: previousPlayers.find(player => player.userId === roomPlayer.user_id)?.score ?? 0,
+      roundsWon: previousPlayers.find(player => player.userId === roomPlayer.user_id)?.roundsWon ?? 0,
+      roundPoints: 0,
       tower: dealtNumbers.slice(index * BLOCKS_PER_TOWER, (index + 1) * BLOCKS_PER_TOWER),
       cannonAwarded: false,
       cannonAvailable: false,
       cannonProgress: [],
       cannonSequence: [],
-      cannonUsedSequences: []
+      cannonEligibleNumbers: []
     }))
     : (isMultiplayer ? seatIds.slice(0, 3) : ["human", "cpu"]).map((id, index) => ({
       id,
       name: id === "human"
         ? isMultiplayer ? `Jugador ${index + 1}` : campaign.playerName
         : id === "cpu" ? "CPU" : `Jugador ${index + 1}`,
+      score: previousPlayers.find(player => player.id === id)?.score ?? 0,
+      roundsWon: previousPlayers.find(player => player.id === id)?.roundsWon ?? 0,
+      roundPoints: 0,
       tower: dealtNumbers.slice(index * BLOCKS_PER_TOWER, (index + 1) * BLOCKS_PER_TOWER),
       cannonAwarded: false,
       cannonAvailable: false,
       cannonProgress: [],
       cannonSequence: [],
-      cannonUsedSequences: []
+      cannonEligibleNumbers: []
     }));
+  players.forEach(player => {
+    player.cannonEligibleNumbers = [...player.tower];
+  });
   state = {
     mode,
-    levelIndex,
+    levelIndex: currentLevelIndex,
     maximum,
     difficulty,
     players,
@@ -545,11 +617,12 @@ function newGame(mode, levelIndex, difficulty = elements.difficulty.value, onlin
   elements.battlefield.classList.toggle("four-player-game", isMultiplayer && players.length === 4);
   elements.campaignProgress.hidden = false;
   elements.campaignProgress.textContent = isMultiplayer
-    ? `Multijugador · Nivel ${levelIndex + 1} de ${LEVELS.length}`
-    : `Campaña · Nivel ${levelIndex + 1} de ${LEVELS.length}`;
-  elements.roundStartLabel.textContent = `Nivel ${levelIndex + 1}`;
+    ? `Multijugador · Nivel ${currentLevelIndex + 1} de ${totalLevels}`
+    : `Campaña · Nivel ${currentLevelIndex + 1} de ${LEVELS.length}`;
+  elements.roundStartLabel.textContent = `Nivel ${currentLevelIndex + 1}`;
   elements.roundRange.textContent = `Números del 1 al ${maximum}`;
-  elements.rouletteWheel.style.background = rouletteBackground(players.length);
+  elements.rouletteWheel.style.background = rouletteBackground(players);
+  renderRouletteLegend(players);
   elements.resultAction.hidden = true;
   elements.resultExit.hidden = true;
   elements.battlefield.classList.remove("battlefield-victory");
@@ -568,12 +641,11 @@ function isOrdered(tower) {
 }
 
 function findConsecutiveSet(player) {
-  const usedSequences = new Set(player.cannonUsedSequences ?? []);
-  for (let index = 0; index <= player.tower.length - 4; index += 1) {
-    const sequence = player.tower.slice(index, index + 4);
+  const eligible = new Set(player.cannonEligibleNumbers ?? []);
+  for (let index = 0; index <= player.tower.length - CANNON_SEQUENCE_LENGTH; index += 1) {
+    const sequence = player.tower.slice(index, index + CANNON_SEQUENCE_LENGTH);
     if (!sequence.every((number, offset) => number === sequence[0] - offset)) continue;
-    const sequenceKey = sequence.join("-");
-    if (!usedSequences.has(sequenceKey)) return sequence;
+    if (sequence.every(number => eligible.has(number))) return sequence;
   }
   return null;
 }
@@ -586,6 +658,78 @@ function inversionCount(tower) {
     }
   }
   return inversions;
+}
+
+function blocksNeededToWin(tower) {
+  if (tower.length < 2) return 0;
+  const descendingLengths = Array(tower.length).fill(1);
+  for (let index = 0; index < tower.length; index += 1) {
+    for (let previous = 0; previous < index; previous += 1) {
+      if (tower[previous] > tower[index]) {
+        descendingLengths[index] = Math.max(descendingLengths[index], descendingLengths[previous] + 1);
+      }
+    }
+  }
+  return tower.length - Math.max(...descendingLengths);
+}
+
+function awardMultiplayerRound(winnerId) {
+  for (const player of state.players) {
+    const blocksToWin = player.id === winnerId ? 0 : blocksNeededToWin(player.tower);
+    const roundPoints = player.id === winnerId
+      ? 3
+      : blocksToWin === 1 ? 2 : blocksToWin === 2 ? 1 : 0;
+    player.score = (Number.isFinite(player.score) ? player.score : 0) + roundPoints;
+    player.roundsWon = (Number.isFinite(player.roundsWon) ? player.roundsWon : 0)
+      + (player.id === winnerId ? 1 : 0);
+    player.roundPoints = roundPoints;
+  }
+}
+
+function multiplayerStandings() {
+  return state.players
+    .map((player, seatIndex) => ({ player, seatIndex }))
+    .sort((left, right) =>
+      right.player.score - left.player.score
+      || right.player.roundsWon - left.player.roundsWon
+      || left.seatIndex - right.seatIndex
+    );
+}
+
+function renderMultiplayerScoreboard() {
+  const visible = state.mode === "multiplayer";
+  elements.multiplayerScoreboard.hidden = !visible;
+  elements.multiplayerScoringRule.hidden = !visible;
+  if (!visible) return;
+  elements.multiplayerScoreboard.replaceChildren(...multiplayerStandings().map(({ player }) => {
+    const entry = document.createElement("span");
+    const name = document.createElement("strong");
+    const stats = document.createElement("span");
+    entry.className = "scoreboard-player";
+    name.textContent = player.name;
+    stats.textContent =
+      `${player.score ?? 0} ${player.score === 1 ? "punto" : "puntos"} · ${player.roundsWon ?? 0} ${player.roundsWon === 1 ? "victoria" : "victorias"}`;
+    entry.append(name, stats);
+    return entry;
+  }));
+}
+
+function renderRoundStandings() {
+  const visible = state.mode === "multiplayer" && state.gameOver;
+  elements.roundStandings.hidden = !visible;
+  if (!visible) return;
+  const finalRound = state.levelIndex + 1 === multiplayerLevelCount(state.players.length);
+  elements.roundStandingsTitle.textContent = finalRound ? "Clasificación final" : "Clasificación provisional";
+  elements.roundStandingsList.replaceChildren(...multiplayerStandings().map(({ player }) => {
+    const item = document.createElement("li");
+    const name = document.createElement("strong");
+    const stats = document.createElement("span");
+    name.textContent = player.name;
+    stats.textContent =
+      `${player.score} ${player.score === 1 ? "punto" : "puntos"} · +${player.roundPoints} esta ronda · ${player.roundsWon} ${player.roundsWon === 1 ? "victoria" : "victorias"}`;
+    item.append(name, stats);
+    return item;
+  }));
 }
 
 function blockColors(number, player) {
@@ -688,6 +832,8 @@ function render() {
   }
   elements.humanLabel.textContent = state.mode === "multiplayer" ? getPlayer("human")?.name ?? "Jugador 1" : "Tú";
   elements.cpuLabel.textContent = state.mode === "multiplayer" ? getPlayer("player2")?.name ?? "Jugador 2" : "CPU";
+  renderMultiplayerScoreboard();
+  renderRoundStandings();
   elements.rockScene.classList.toggle("cpu-game", state.mode === "bot");
   elements.rockScene.setAttribute(
     "aria-label",
@@ -702,6 +848,10 @@ function render() {
     const heading = panel.querySelector(".player-heading h2");
     panel.querySelector(".tower-reference")?.remove();
     if (player) heading.textContent = player.name;
+    panel.classList.toggle(
+      "player-turn-active",
+      Boolean(player && player.id === state.activePlayer && state.phase !== "ready" && !state.gameOver)
+    );
     const towerHidden = Boolean(player && state.blindMode && state.lastMove && !state.gameOver && player.id !== localPlayerId);
     const cannonTargeting = Boolean(
       player
@@ -829,6 +979,7 @@ function render() {
       : choosingBlock ? "Elige un bloque de tu torre."
         : activePlayer?.id === "cpu" ? "Turno de la CPU."
           : `${activePlayer?.name ?? ""}: elige un número o revela uno aleatorio.`;
+  updateTurnIndicator();
   if (state.cpuTimer !== null) clearTimeout(state.cpuTimer);
   if (state.activePlayer === "cpu" && !state.gameOver) {
     if (state.phase === "choose-number") state.cpuTimer = setTimeout(cpuMove, 800);
@@ -843,11 +994,19 @@ function startRoundRoulette() {
   elements.roundStart.classList.add("roulette-running");
   elements.rouletteWheel.classList.add("roulette-spinning");
   elements.rouletteResult.textContent = "La suerte está decidiendo quién empieza…";
-  const starter = state.players[Math.floor(Math.random() * state.players.length)];
-  elements.rouletteSymbol.textContent = "★";
-  elements.rouletteWheel.style.background = rouletteBackground(state.players.length);
+  const starterIndex = Math.floor(Math.random() * state.players.length);
+  const starter = state.players[starterIndex];
+  const slice = 360 / state.players.length;
+  const centerAngle = (starterIndex + .5) * slice;
+  const alignedAngle = (360 - centerAngle) % 360;
+  elements.rouletteWheel.style.setProperty("--roulette-final-rotation", `${1800 + alignedAngle}deg`);
+  elements.rouletteWheel.style.background = rouletteBackground(state.players);
   state.animationTimers.push(window.setTimeout(() => {
     elements.rouletteWheel.classList.remove("roulette-spinning");
+    elements.rouletteWheel.style.transform = `rotate(${alignedAngle}deg)`;
+    elements.rouletteSymbol.textContent = starter.name;
+    elements.rouletteSymbol.style.background = rouletteColor(starter.id);
+    elements.rouletteSymbol.style.fontSize = starter.name.length > 10 ? ".55rem" : ".72rem";
     elements.rouletteResult.textContent = `${starter.name} empieza`;
     state.animationTimers.push(window.setTimeout(() => {
       state.activePlayer = starter.id;
@@ -860,14 +1019,38 @@ function startRoundRoulette() {
   }, 1850));
 }
 
-function rouletteBackground(playerCount) {
-  const colors = ["#984b2c", "#305777", "#a87935", "#557347"];
-  const slice = 360 / playerCount;
-  const segments = colors.slice(0, playerCount).map((color, index) => {
+function rouletteColor(playerId) {
+  const colors = {
+    human: "#984b2c",
+    cpu: "#305777",
+    player2: "#305777",
+    player3: "#a87935",
+    player4: "#557347"
+  };
+  return colors[playerId] || "#69513a";
+}
+
+function rouletteBackground(players) {
+  const slice = 360 / players.length;
+  const segments = players.map((player, index) => {
     const start = index * slice;
-    return `${color} ${start}deg ${start + slice}deg`;
+    return `${rouletteColor(player.id)} ${start}deg ${start + slice}deg`;
   });
   return `conic-gradient(${segments.join(", ")})`;
+}
+
+function renderRouletteLegend(players) {
+  elements.rouletteLegend.replaceChildren(...players.map(player => {
+    const item = document.createElement("span");
+    item.className = "roulette-legend-item";
+    const swatch = document.createElement("i");
+    swatch.style.backgroundColor = rouletteColor(player.id);
+    swatch.setAttribute("aria-hidden", "true");
+    const label = document.createElement("span");
+    label.textContent = player.name;
+    item.append(swatch, label);
+    return item;
+  }));
 }
 
 function chooseCurrentNumber() {
@@ -948,11 +1131,15 @@ function fireCannon(targetPlayerId, index, actorId = localPlayerId) {
   if (replacementNumber === null) return;
   const replacedNumber = target.tower[index];
   target.tower[index] = replacementNumber;
+  target.cannonEligibleNumbers ??= [...target.tower];
+  target.cannonEligibleNumbers = target.cannonEligibleNumbers.filter(number => number !== replacedNumber);
+  target.cannonEligibleNumbers.push(replacementNumber);
   state.available.add(replacedNumber);
   attacker.cannonAvailable = false;
   attacker.cannonProgress = [];
-  attacker.cannonUsedSequences ??= [];
-  attacker.cannonUsedSequences.push(attacker.cannonSequence.join("-"));
+  attacker.cannonEligibleNumbers = attacker.cannonEligibleNumbers.filter(
+    number => !attacker.cannonSequence.includes(number)
+  );
   attacker.cannonSequence = [];
   state.phase = "cannon-firing";
   state.lastCannonShot = {
@@ -1142,6 +1329,7 @@ function finishMove(player, index) {
   state.lastCannonShot = null;
 
   if (isOrdered(tower)) {
+    if (state.mode === "multiplayer") awardMultiplayerRound(player);
     state.gameOver = true;
     state.phase = "finished";
     state.victoryText = `¡Ganador: ${currentPlayer.name}!`;
@@ -1155,12 +1343,12 @@ function finishMove(player, index) {
         state.victoryAction = "next-level";
         elements.resultAction.textContent = `Continuar al nivel ${state.levelIndex + 2}`;
       }
-    } else if (state.mode === "multiplayer" && state.levelIndex + 1 < LEVELS.length) {
-      state.victoryText = `¡Ganador: ${currentPlayer.name}! Ronda ${state.levelIndex + 1} superada.`;
+    } else if (state.mode === "multiplayer" && state.levelIndex + 1 < multiplayerLevelCount(state.players.length)) {
+      state.victoryText = `¡Ganador: ${currentPlayer.name}! Ronda ${state.levelIndex + 1} superada · +${currentPlayer.roundPoints} puntos.`;
       state.victoryAction = "next-level";
       elements.resultAction.textContent = `Continuar al nivel ${state.levelIndex + 2}`;
     } else if (state.mode === "multiplayer") {
-      state.victoryText = `¡Ganador: ${currentPlayer.name}! Has completado las siete rondas.`;
+      state.victoryText = `¡Ganador: ${currentPlayer.name}! Has completado todas las rondas · +${currentPlayer.roundPoints} puntos.`;
     } else if (state.mode === "bot") {
       state.victoryText = `¡Ganador: ${currentPlayer.name}! Has perdido la campaña.`;
     }
@@ -1175,6 +1363,9 @@ function finishMove(player, index) {
     return;
   }
 
+  currentPlayer.cannonEligibleNumbers ??= [];
+  currentPlayer.cannonEligibleNumbers = currentPlayer.cannonEligibleNumbers.filter(number => number !== previousNumber);
+  currentPlayer.cannonEligibleNumbers.push(placedNumber);
   const sequence = findConsecutiveSet(currentPlayer);
   if (sequence) {
     currentPlayer.cannonAvailable = true;

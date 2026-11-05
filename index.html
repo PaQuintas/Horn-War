@@ -88,12 +88,12 @@
         <h2 id="instructions-title">Instrucciones</h2>
         <ol>
           <li>Ordena tus 10 bloques de mayor a menor desde la base hasta la cima: el número mayor queda abajo y el menor junto al cazador. No hace falta que sean consecutivos.</li>
-          <li>Cuando tengas cuatro números consecutivos en cuatro bloques seguidos de tu torre, de arriba abajo y de menor a mayor —por ejemplo, 23-24-25-26— obtienes un cañonazo. No hace falta haber intercambiado los cuatro bloques: una secuencia que ya estuviera en tu torre también cuenta. Cada secuencia concreta solo puede dar un cañonazo una vez por ronda; después necesitas formar otra secuencia consecutiva. Elige un rival y un bloque suyo para sustituirlo por un número aleatorio del saco; el bloque impactado vuelve al saco.</li>
+          <li>Consigue tres números consecutivos en tres bloques seguidos de tu torre, de arriba abajo y de menor a mayor —por ejemplo, 23-24-25— para obtener un cañonazo. Los números que ya estaban en tu torre pueden completar la secuencia, pero después de cada cañonazo los tres deben haberse adquirido de nuevo, ya sea del saco o de otro jugador. Elige un rival y un bloque suyo para sustituirlo por un número aleatorio del saco; el bloque impactado vuelve al saco.</li>
           <li>En la campaña contra la CPU, completa los siete niveles seguidos para ganar. Si pierdes, la campaña vuelve a empezar.</li>
           <li>En cada turno puedes tomar el número que aparece o revelar uno aleatorio con la interrogación. Al revelar otro, el número anterior se descarta.</li>
           <li>Después de revelar, puedes intercambiar ese número por un bloque de tu torre o pasar turno; si pasas, el número vuelve al saco.</li>
           <li>El número que descartes al intercambiar pasa al siguiente rival. En las salas online, de 2 a 4 jugadores se turnan en círculo.</li>
-          <li>En multijugador, el rango crece con los participantes: el nivel 1 usa números del 1 al 50 para 2 jugadores, 1 al 75 para 3 y 1 al 100 para 4.</li>
+          <li>En multijugador, el rango crece con los participantes: el nivel 1 usa números del 1 al 50 para 2 jugadores, 1 al 75 para 3 y 1 al 100 para 4. Las rondas aumentan la dificultad hasta dejar solo cinco números en el saco.</li>
           <li>Los números no se repiten en una misma partida. Gana quien ordene su torre de mayor a menor primero.</li>
         </ol>
         <p class="instructions-extra">Si activas ocultar las torres rivales, después del primer intercambio solo verás una torre de referencia sin números; la flecha roja señala el bloque que cambió. No hay cortinas.</p>
@@ -113,12 +113,20 @@
           <button id="abandon-game" class="button button-muted" type="button">Abandonar</button>
         </nav>
         <p id="campaign-progress" class="campaign-progress" hidden></p>
+        <div id="multiplayer-scoreboard" class="multiplayer-scoreboard" aria-label="Puntuación multijugador" hidden></div>
+        <p id="multiplayer-scoring-rule" class="multiplayer-scoring-rule" hidden>
+          Por ronda: ganador, 3 puntos; si falta cambiar 1 bloque para ordenar la torre, 2; si faltan 2, 1; con 3 o más, 0.
+        </p>
 
         <section class="battlefield" aria-label="Tablero">
           <div id="round-start" class="round-start-overlay">
             <p id="round-start-label" class="eyebrow">Nivel 1</p>
             <h2 id="round-range">Números del 1 al 50</h2>
-            <div class="roulette-wheel" aria-hidden="true"><span id="roulette-wheel-symbol">?</span></div>
+            <div class="roulette-wrap">
+              <span class="roulette-pointer" aria-hidden="true"></span>
+              <div class="roulette-wheel" role="img" aria-label="Ruleta para elegir quién empieza"><span id="roulette-wheel-symbol">?</span></div>
+            </div>
+            <div id="roulette-legend" class="roulette-legend" aria-label="Jugadores y colores"></div>
             <p id="roulette-result" class="roulette-result" aria-live="polite">Pulsa comenzar para sortear quién empieza.</p>
             <button id="begin-round" class="menu-button menu-button-primary" type="button">Comenzar</button>
           </div>
@@ -238,6 +246,10 @@
 
           <section id="victory-overlay" class="victory-overlay" aria-live="polite" hidden>
             <p id="round-result" class="round-result" role="status"></p>
+            <section id="round-standings" class="round-standings" aria-label="Clasificación" hidden>
+              <h3 id="round-standings-title"></h3>
+              <ol id="round-standings-list"></ol>
+            </section>
             <button id="result-action" class="button menu-button-primary result-action" type="button" hidden></button>
             <button id="result-exit" class="button button-muted result-exit" type="button" hidden>Salir</button>
           </section>
