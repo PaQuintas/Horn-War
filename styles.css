@@ -261,6 +261,7 @@ p {
 }
 
 .instructions-screen {
+  width: min(650px, 100%);
   align-items: stretch;
   text-align: left;
 }
@@ -274,23 +275,46 @@ p {
   margin-bottom: 15px;
 }
 
-.instructions-screen ol {
+.instructions-content {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+}
+
+.instructions-content h3 {
+  margin: 0 0 4px;
+  color: #4a321d;
+  font-size: 1.12rem;
+  text-align: left;
+}
+
+.instructions-content p {
   margin: 0;
-  padding-left: 22px;
-  color: #503c26;
-  line-height: 1.5;
-}
-
-.instructions-screen li {
-  margin-bottom: 9px;
-  padding-left: 3px;
-}
-
-.instructions-extra {
-  margin: 8px 0 0;
   color: #604728;
   font-size: .9rem;
   line-height: 1.45;
+}
+
+.scoring-table {
+  width: 100%;
+  margin: 7px 0;
+  border-collapse: collapse;
+  color: #51391f;
+  font-size: .88rem;
+  text-align: left;
+}
+
+.scoring-table th,
+.scoring-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid rgba(102, 72, 35, .28);
+}
+
+.scoring-table th:last-child,
+.scoring-table td:last-child {
+  width: 72px;
+  font-weight: 700;
+  text-align: center;
 }
 
 .text-button {
@@ -320,12 +344,18 @@ p {
 }
 
 .campaign-progress {
-  margin: 0 0 6px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto 8px;
+  padding: 5px 12px;
+  border: 1px solid rgba(238, 210, 156, .58);
+  border-radius: 999px;
   color: #f0dfba;
   font-size: .88rem;
   font-weight: 700;
   text-align: center;
   text-shadow: 0 1px 3px #241810;
+  background: rgba(52, 37, 27, .7);
 }
 
 .multiplayer-scoreboard {
@@ -809,6 +839,34 @@ p {
   margin: 0;
   color: #f3e5c7;
   font-size: 1.2rem;
+}
+
+.player-panel.player-turn-active {
+  z-index: 3;
+  border: 2px solid rgba(255, 230, 141, .92);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(97, 70, 32, .62), rgba(54, 46, 26, .32));
+  box-shadow: 0 0 22px 5px rgba(255, 213, 92, .55), inset 0 0 18px rgba(255, 231, 154, .22);
+}
+
+.player-panel.player-turn-active .player-heading::after {
+  margin-left: 7px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: #39240b;
+  background: #ffe28a;
+  content: "TURNO";
+  font: 800 .62rem/1.2 Arial, sans-serif;
+  letter-spacing: .04em;
+  box-shadow: 0 0 10px rgba(255, 221, 110, .8);
+}
+
+.player-panel.player-turn-active.player-turn-local .player-heading::after {
+  content: "TE TOCA";
+}
+
+.player-panel.player-turn-active .tower {
+  filter: drop-shadow(0 0 9px rgba(255, 219, 108, .82));
 }
 
 .tower {
@@ -1720,14 +1778,19 @@ p {
 .game-multiplayer .player-heading {
   display: flex;
   z-index: 2;
-  min-height: 28px;
-  margin-bottom: 22px;
+  min-height: 34px;
+  margin-bottom: 8px;
+  transform: none;
 }
 
 .game-multiplayer .player-heading h2 {
   color: #fff3d4;
   font-size: 1rem;
   text-shadow: 0 1px 3px rgba(23, 28, 14, .8);
+}
+
+.game-multiplayer .player-panel.player-tiebreaker-spectator {
+  opacity: .58;
 }
 
 .game-multiplayer .player-panel.player-turn-active .player-heading h2 {
@@ -2074,7 +2137,8 @@ p {
 
   .game-multiplayer .player-heading {
     min-height: 25px;
-    margin-bottom: 22px;
+    margin-bottom: 8px;
+    transform: none;
   }
 
   .game-multiplayer .player-heading h2 {

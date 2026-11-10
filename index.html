@@ -77,7 +77,7 @@
           <input id="room-blind-towers" type="checkbox">
           <span>Ocultar las torres rivales tras el primer intercambio</span>
         </label>
-        <p class="menu-note">Sin cortina: se muestra una torre de referencia sin números.</p>
+        <p class="menu-note">Modo cortina: oculta los números de las torres rivales tras el primer intercambio.</p>
         <p id="room-lobby-status" class="menu-note" aria-live="polite">Esperando jugadores…</p>
         <button id="start-room" class="menu-button menu-button-primary" type="button" disabled>Empezar partida</button>
         <button id="leave-room" class="text-button menu-back" type="button">Salir de la sala</button>
@@ -86,17 +86,33 @@
       <section id="instructions-screen" class="menu-screen instructions-screen" aria-labelledby="instructions-title" hidden>
         <p class="eyebrow">Reglas del desafío</p>
         <h2 id="instructions-title">Instrucciones</h2>
-        <ol>
-          <li>Ordena tus 10 bloques de mayor a menor desde la base hasta la cima: el número mayor queda abajo y el menor junto al cazador. No hace falta que sean consecutivos.</li>
-          <li>Consigue tres números consecutivos en tres bloques seguidos de tu torre, de arriba abajo y de menor a mayor —por ejemplo, 23-24-25— para obtener un cañonazo. Los números que ya estaban en tu torre pueden completar la secuencia, pero después de cada cañonazo los tres deben haberse adquirido de nuevo, ya sea del saco o de otro jugador. Elige un rival y un bloque suyo para sustituirlo por un número aleatorio del saco; el bloque impactado vuelve al saco.</li>
-          <li>En la campaña contra la CPU, completa los siete niveles seguidos para ganar. Si pierdes, la campaña vuelve a empezar.</li>
-          <li>En cada turno puedes tomar el número que aparece o revelar uno aleatorio con la interrogación. Al revelar otro, el número anterior se descarta.</li>
-          <li>Después de revelar, puedes intercambiar ese número por un bloque de tu torre o pasar turno; si pasas, el número vuelve al saco.</li>
-          <li>El número que descartes al intercambiar pasa al siguiente rival. En las salas online, de 2 a 4 jugadores se turnan en círculo.</li>
-          <li>En multijugador, el rango crece con los participantes: el nivel 1 usa números del 1 al 50 para 2 jugadores, 1 al 75 para 3 y 1 al 100 para 4. Las rondas aumentan la dificultad hasta dejar solo cinco números en el saco.</li>
-          <li>Los números no se repiten en una misma partida. Gana quien ordene su torre de mayor a menor primero.</li>
-        </ol>
-        <p class="instructions-extra">Si activas ocultar las torres rivales, después del primer intercambio solo verás una torre de referencia sin números; la flecha roja señala el bloque que cambió. No hay cortinas.</p>
+        <div class="instructions-content">
+          <section aria-labelledby="instructions-game-title">
+            <h3 id="instructions-game-title">El juego</h3>
+            <p>Ordena tus 10 bloques de mayor a menor, desde la base hasta el cazador. En tu turno, elige el número visible o pide uno aleatorio; luego cámbialo por un bloque de tu torre. El bloque que sale se ofrece al siguiente jugador. Gana la ronda quien ordene primero su torre. En campaña, debes ganar los siete niveles seguidos.</p>
+          </section>
+          <section aria-labelledby="instructions-cannon-title">
+            <h3 id="instructions-cannon-title">Cañonazo</h3>
+            <p>Consigue tres números consecutivos en tres bloques contiguos, en orden ascendente de arriba abajo (por ejemplo, 23, 24 y 25). Puedes combinar fichas que ya estaban en tu torre. Dispara a un bloque rival: se reemplaza por una ficha aleatoria y el bloque impactado vuelve al saco. Después de disparar, debes adquirir de nuevo las tres fichas de la secuencia para recargar.</p>
+          </section>
+          <section aria-labelledby="instructions-scoring-title">
+            <h3 id="instructions-scoring-title">Puntuación multijugador</h3>
+            <table class="scoring-table">
+              <thead><tr><th scope="col">Resultado de la ronda</th><th scope="col">Puntos</th></tr></thead>
+              <tbody>
+                <tr><td>Gana la ronda</td><td>+3</td></tr>
+                <tr><td>Le falta cambiar 1 bloque para ordenar</td><td>+2</td></tr>
+                <tr><td>Le faltan 2 bloques para ordenar</td><td>+1</td></tr>
+                <tr><td>Le faltan 3 bloques o más</td><td>0</td></tr>
+              </tbody>
+            </table>
+            <p>Al final gana quien tenga más puntos. Si empatan, gana quien tenga más victorias; si también empatan, los jugadores empatados juegan una ronda extra.</p>
+          </section>
+          <section aria-labelledby="instructions-curtain-title">
+            <h3 id="instructions-curtain-title">Modo cortina</h3>
+            <p>Oculta los números de las torres rivales tras el primer intercambio. Verás una torre de referencia sin números y una flecha roja que marca el bloque cambiado.</p>
+          </section>
+        </div>
         <button class="text-button menu-back" data-screen="main-menu" type="button">Volver al menú</button>
       </section>
 
@@ -115,7 +131,7 @@
         <p id="campaign-progress" class="campaign-progress" hidden></p>
         <div id="multiplayer-scoreboard" class="multiplayer-scoreboard" aria-label="Puntuación multijugador" hidden></div>
         <p id="multiplayer-scoring-rule" class="multiplayer-scoring-rule" hidden>
-          Por ronda: ganador, 3 puntos; si falta cambiar 1 bloque para ordenar la torre, 2; si faltan 2, 1; con 3 o más, 0.
+          Por ronda: ganador, 3 puntos; si falta cambiar 1 bloque para ordenar la torre, 2; si faltan 2, 1; con 3 o más, 0. Empate final en puntos y victorias: ronda extra entre los empatados.
         </p>
 
         <section class="battlefield" aria-label="Tablero">

@@ -293,6 +293,7 @@ function applyRoomGameState(snapshot) {
       cannonSequence: player.cannonSequence ?? [],
       cannonEligibleNumbers: player.cannonEligibleNumbers ?? player.tower
     })),
+    roundPlayerIds: snapshot.roundPlayerIds ?? snapshot.players.map(player => player.id),
     available: new Set(snapshot.available),
     cpuTimer: null,
     animationTimers: [],
@@ -493,6 +494,12 @@ function takeRandomAvailable() {
   return number;
 }
 
+function recycleOfferedNumber() {
+  if (state.offered === null) return;
+  state.available.add(state.offered);
+  state.offered = null;
+}
+
 function prepareTurn(player) {
   state.activePlayer = player;
   state.choiceNumber = null;
@@ -519,7 +526,7 @@ function prepareTurn(player) {
   }
 }
 
-function newGame(mode, levelIndex, difficulty = elements.difficulty.value, onlinePlayers = null) {
+function newGame(mode, levelIndex, difficulty = elements.difficulty.value, onlinePlayers = null, tiebreakerPlayerIds = null) {
   const canCarryScores = mode === "multiplayer"
     && state?.mode === "multiplayer"
     && (!onlinePlayers || state.roomId === currentRoom?.id);
@@ -602,6 +609,12 @@ function newGame(mode, levelIndex, difficulty = elements.difficulty.value, onlin
     roomId: onlinePlayers ? currentRoom.id : null,
     revision: previousRoomRevision,
     gameOver: false,
+    tiebreaker: Boolean(tiebreakerPlayerIds),
+    tiebreakerPlayerIds: tiebreakerPlayerIds ? [...tiebreakerPlayerIds] : null,
+    tiebreakerWinnerId: null,
+    roundPlayerIds: tiebreakerPlayerIds
+      ? players.filter(player => tiebreakerPlayerIds.includes(player.id)).map(player => player.id)
+      : players.map(player => player.id),
     cpuTimer: null,
     animationTimers: []
   };
@@ -617,12 +630,13 @@ function newGame(mode, levelIndex, difficulty = elements.difficulty.value, onlin
   elements.battlefield.classList.toggle("four-player-game", isMultiplayer && players.length === 4);
   elements.campaignProgress.hidden = false;
   elements.campaignProgress.textContent = isMultiplayer
-    ? `Multijugador · Nivel ${currentLevelIndex + 1} de ${totalLevels}`
-    : `Campaña · Nivel ${currentLevelIndex + 1} de ${LEVELS.length}`;
-  elements.roundStartLabel.textContent = `Nivel ${currentLevelIndex + 1}`;
+    ? `${tiebreakerPlayerIds ? "Desempate" : `Multijugador · Nivel ${currentLevelIndex + 1} de ${totalLevels}`} · Números del 1 al ${maximum}`
+    : `Campaña · Nivel ${currentLevelIndex + 1} de ${LEVELS.length} · Números del 1 al ${maximum}`;
+  elements.roundStartLabel.textContent = tiebreakerPlayerIds ? "Ronda de desempate" : `Nivel ${currentLevelIndex + 1}`;
   elements.roundRange.textContent = `Números del 1 al ${maximum}`;
-  elements.rouletteWheel.style.background = rouletteBackground(players);
-  renderRouletteLegend(players);
+  const roundPlayers = activeRoundPlayers();
+  elements.rouletteWheel.style.background = rouletteBackground(roundPlayers);
+  renderRouletteLegend(roundPlayers);
   elements.resultAction.hidden = true;
   elements.resultExit.hidden = true;
   elements.battlefield.classList.remove("battlefield-victory");
@@ -633,6 +647,11 @@ function newGame(mode, levelIndex, difficulty = elements.difficulty.value, onlin
 
 function getPlayer(playerId) {
   return state.players.find(player => player.id === playerId);
+}
+
+function activeRoundPlayers() {
+  const activeIds = new Set(state.roundPlayerIds ?? state.players.map(player => player.id));
+  return state.players.filter(player => activeIds.has(player.id));
 }
 
 function isOrdered(tower) {
@@ -690,10 +709,20 @@ function multiplayerStandings() {
   return state.players
     .map((player, seatIndex) => ({ player, seatIndex }))
     .sort((left, right) =>
-      right.player.score - left.player.score
+      Number(right.player.id === state.tiebreakerWinnerId) - Number(left.player.id === state.tiebreakerWinnerId)
+      || right.player.score - left.player.score
       || right.player.roundsWon - left.player.roundsWon
       || left.seatIndex - right.seatIndex
     );
+}
+
+function tiedLeaders() {
+  const standings = multiplayerStandings();
+  const leader = standings[0]?.player;
+  return leader
+    ? standings.filter(({ player }) => player.score === leader.score && player.roundsWon === leader.roundsWon)
+      .map(({ player }) => player)
+    : [];
 }
 
 function renderMultiplayerScoreboard() {
@@ -718,15 +747,17 @@ function renderRoundStandings() {
   const visible = state.mode === "multiplayer" && state.gameOver;
   elements.roundStandings.hidden = !visible;
   if (!visible) return;
-  const finalRound = state.levelIndex + 1 === multiplayerLevelCount(state.players.length);
-  elements.roundStandingsTitle.textContent = finalRound ? "Clasificación final" : "Clasificación provisional";
+  const finalRound = state.tiebreaker || state.levelIndex + 1 === multiplayerLevelCount(state.players.length);
+  elements.roundStandingsTitle.textContent = state.tiebreaker
+    ? "Clasificación final · desempate"
+    : finalRound ? "Clasificación final" : "Clasificación provisional";
   elements.roundStandingsList.replaceChildren(...multiplayerStandings().map(({ player }) => {
     const item = document.createElement("li");
     const name = document.createElement("strong");
     const stats = document.createElement("span");
     name.textContent = player.name;
     stats.textContent =
-      `${player.score} ${player.score === 1 ? "punto" : "puntos"} · +${player.roundPoints} esta ronda · ${player.roundsWon} ${player.roundsWon === 1 ? "victoria" : "victorias"}`;
+      `${player.score} ${player.score === 1 ? "punto" : "puntos"} · +${player.roundPoints} esta ronda · ${player.roundsWon} ${player.roundsWon === 1 ? "victoria" : "victorias"}${player.id === state.tiebreakerWinnerId ? " · Campeón" : ""}`;
     item.append(name, stats);
     return item;
   }));
@@ -793,6 +824,7 @@ function towerMarkup(player) {
       && !state.gameOver;
     const canBeCannonTarget = state.phase === "choose-cannon-target"
       && player.id !== state.activePlayer
+      && activeRoundPlayers().some(roundPlayer => roundPlayer.id === player.id)
       && state.activePlayer === localPlayerId
       && !state.gameOver;
     const lastMoveTarget = state.lastMove?.playerId === player.id
@@ -827,7 +859,10 @@ function render() {
   for (const panel of elements.panels) {
     const playerId = panel.dataset.player;
     const player = getPlayer(playerId);
+    const activePlayerIds = new Set(state.roundPlayerIds ?? state.players.map(candidate => candidate.id));
+    const isTiebreakerSpectator = Boolean(state.tiebreaker && player && !activePlayerIds.has(player.id));
     panel.hidden = !player;
+    panel.classList.toggle("player-tiebreaker-spectator", isTiebreakerSpectator);
     if (player) elements.towers[playerId].innerHTML = towerMarkup(player);
   }
   elements.humanLabel.textContent = state.mode === "multiplayer" ? getPlayer("human")?.name ?? "Jugador 1" : "Tú";
@@ -846,17 +881,25 @@ function render() {
   elements.panels.forEach(panel => {
     const player = getPlayer(panel.dataset.player);
     const heading = panel.querySelector(".player-heading h2");
+    const activePlayerIds = new Set(state.roundPlayerIds ?? state.players.map(candidate => candidate.id));
     panel.querySelector(".tower-reference")?.remove();
-    if (player) heading.textContent = player.name;
+    if (player) {
+      heading.textContent = `${player.name}${state.tiebreaker && !activePlayerIds.has(player.id) ? " · Espectador" : ""}`;
+    }
     panel.classList.toggle(
       "player-turn-active",
       Boolean(player && player.id === state.activePlayer && state.phase !== "ready" && !state.gameOver)
+    );
+    panel.classList.toggle(
+      "player-turn-local",
+      Boolean(player && player.id === state.activePlayer && player.id === localPlayerId && state.phase !== "ready" && !state.gameOver)
     );
     const towerHidden = Boolean(player && state.blindMode && state.lastMove && !state.gameOver && player.id !== localPlayerId);
     const cannonTargeting = Boolean(
       player
       && state.phase === "choose-cannon-target"
       && player.id !== state.activePlayer
+      && activePlayerIds.has(player.id)
       && state.activePlayer === localPlayerId
     );
     const canTargetReference = cannonTargeting;
@@ -949,7 +992,9 @@ function render() {
   );
   elements.randomChoice.hidden = false;
   elements.randomChoice.disabled = !choosingNumber
-    || (state.randomRevealed ? false : state.available.size === 0);
+    || (state.randomRevealed
+      ? false
+      : state.available.size === 0 && state.choiceNumber === null && state.offered === null);
   elements.randomSymbol.textContent = state.randomRevealed ? "↷" : "?";
   elements.passLabel.hidden = !state.randomRevealed;
   elements.randomChoice.classList.toggle("choice-card-pass", state.randomRevealed);
@@ -990,17 +1035,19 @@ function render() {
 
 function startRoundRoulette() {
   if (state.phase !== "ready") return;
+  const participants = activeRoundPlayers();
   elements.beginRound.disabled = true;
   elements.roundStart.classList.add("roulette-running");
   elements.rouletteWheel.classList.add("roulette-spinning");
   elements.rouletteResult.textContent = "La suerte está decidiendo quién empieza…";
-  const starterIndex = Math.floor(Math.random() * state.players.length);
-  const starter = state.players[starterIndex];
-  const slice = 360 / state.players.length;
+  const starterIndex = Math.floor(Math.random() * participants.length);
+  const starter = participants[starterIndex];
+  const slice = 360 / participants.length;
   const centerAngle = (starterIndex + .5) * slice;
   const alignedAngle = (360 - centerAngle) % 360;
   elements.rouletteWheel.style.setProperty("--roulette-final-rotation", `${1800 + alignedAngle}deg`);
-  elements.rouletteWheel.style.background = rouletteBackground(state.players);
+  elements.rouletteWheel.style.background = rouletteBackground(participants);
+  renderRouletteLegend(participants);
   state.animationTimers.push(window.setTimeout(() => {
     elements.rouletteWheel.classList.remove("roulette-spinning");
     elements.rouletteWheel.style.transform = `rotate(${alignedAngle}deg)`;
@@ -1078,7 +1125,13 @@ function revealRandomNumber() {
     || state.randomRevealed
   ) return;
 
-  if (state.choiceSource === "offer") state.offered = null;
+  if (state.choiceSource === "offer") {
+    if (state.offered !== null) recycleOfferedNumber();
+    else if (state.choiceNumber !== null) state.available.add(state.choiceNumber);
+  } else if (state.choiceSource === "available" && state.choiceNumber !== null) {
+    state.available.add(state.choiceNumber);
+  }
+  state.choiceNumber = null;
   state.choiceNumber = takeRandomAvailable();
   state.choiceSource = state.choiceNumber === null ? null : "available";
   state.randomRevealed = true;
@@ -1107,8 +1160,9 @@ function passTurn() {
 }
 
 function prepareNextTurn() {
-  const activeIndex = state.players.findIndex(player => player.id === state.activePlayer);
-  const nextPlayer = state.players[(activeIndex + 1) % state.players.length];
+  const players = activeRoundPlayers();
+  const activeIndex = players.findIndex(player => player.id === state.activePlayer);
+  const nextPlayer = players[(activeIndex + 1) % players.length];
   prepareTurn(nextPlayer.id);
 }
 
@@ -1122,13 +1176,23 @@ function fireCannon(targetPlayerId, index, actorId = localPlayerId) {
     || !attacker?.cannonAvailable
     || !target
     || target.id === attacker.id
+    || !activeRoundPlayers().some(player => player.id === target.id)
     || !Number.isInteger(index)
     || index < 0
     || index >= target.tower.length
   ) return;
 
+  if (state.available.size === 0) recycleOfferedNumber();
   const replacementNumber = takeRandomAvailable();
-  if (replacementNumber === null) return;
+  if (replacementNumber === null) {
+    console.error("Could not fire the cannon because no replacement number was available.");
+    attacker.cannonAvailable = false;
+    attacker.cannonSequence = [];
+    prepareNextTurn();
+    render();
+    persistOnlineGameState().catch(error => console.error("Could not save the turn after the unavailable cannon shot.", error));
+    return;
+  }
   const replacedNumber = target.tower[index];
   target.tower[index] = replacementNumber;
   target.cannonEligibleNumbers ??= [...target.tower];
@@ -1329,7 +1393,7 @@ function finishMove(player, index) {
   state.lastCannonShot = null;
 
   if (isOrdered(tower)) {
-    if (state.mode === "multiplayer") awardMultiplayerRound(player);
+    if (state.mode === "multiplayer" && !state.tiebreaker) awardMultiplayerRound(player);
     state.gameOver = true;
     state.phase = "finished";
     state.victoryText = `¡Ganador: ${currentPlayer.name}!`;
@@ -1343,12 +1407,29 @@ function finishMove(player, index) {
         state.victoryAction = "next-level";
         elements.resultAction.textContent = `Continuar al nivel ${state.levelIndex + 2}`;
       }
+    } else if (state.mode === "multiplayer" && state.tiebreaker) {
+      state.tiebreakerWinnerId = player;
+      state.victoryText = `¡${currentPlayer.name} gana la ronda de desempate y la partida!`;
+    } else if (
+      state.mode === "multiplayer"
+      && state.levelIndex + 1 === multiplayerLevelCount(state.players.length)
+    ) {
+      const leaders = tiedLeaders();
+      if (leaders.length > 1) {
+        state.tiebreakerPlayerIds = leaders.map(candidate => candidate.id);
+        state.victoryText =
+          `Empate en puntos y victorias entre ${leaders.map(candidate => candidate.name).join(", ")}. Jugarán una ronda extra para desempatar.`;
+        state.victoryAction = "tiebreaker";
+        elements.resultAction.textContent = "Jugar ronda de desempate";
+      } else {
+        const champion = multiplayerStandings()[0].player;
+        state.victoryText =
+          `¡${champion.name} gana la partida con ${champion.score} ${champion.score === 1 ? "punto" : "puntos"} y ${champion.roundsWon} ${champion.roundsWon === 1 ? "victoria" : "victorias"}!`;
+      }
     } else if (state.mode === "multiplayer" && state.levelIndex + 1 < multiplayerLevelCount(state.players.length)) {
       state.victoryText = `¡Ganador: ${currentPlayer.name}! Ronda ${state.levelIndex + 1} superada · +${currentPlayer.roundPoints} puntos.`;
       state.victoryAction = "next-level";
       elements.resultAction.textContent = `Continuar al nivel ${state.levelIndex + 2}`;
-    } else if (state.mode === "multiplayer") {
-      state.victoryText = `¡Ganador: ${currentPlayer.name}! Has completado todas las rondas · +${currentPlayer.roundPoints} puntos.`;
     } else if (state.mode === "bot") {
       state.victoryText = `¡Ganador: ${currentPlayer.name}! Has perdido la campaña.`;
     }
@@ -1432,6 +1513,11 @@ function cpuMove() {
   const bestChoices = choices.filter(choice => choice.score === bestScore);
   const choice = bestChoices[Math.floor(Math.random() * bestChoices.length)];
   if (choice.source === "available") {
+    if (state.choiceSource === "offer" && state.offered !== null) {
+      recycleOfferedNumber();
+    } else if (state.choiceSource === "available" && state.choiceNumber !== null) {
+      state.available.add(state.choiceNumber);
+    }
     state.available.delete(choice.number);
   }
   state.offered = null;
@@ -1519,6 +1605,19 @@ document.querySelector("#campaign-level-continue").addEventListener("click", () 
 });
 elements.beginRound.addEventListener("click", startRoundRoulette);
 elements.resultAction.addEventListener("click", () => {
+  if (state.victoryAction === "tiebreaker") {
+    if (currentRoom && !currentRoom.isHost) return;
+    newGame(
+      "multiplayer",
+      state.levelIndex + 1,
+      "medium",
+      currentRoom?.players ?? null,
+      state.tiebreakerPlayerIds
+    );
+    showScreen("game-screen");
+    persistOnlineGameState().catch(error => console.error("Could not save the tiebreaker round.", error));
+    return;
+  }
   if (state.victoryAction === "next-level") {
     if (currentRoom) {
       if (!currentRoom.isHost) return;
